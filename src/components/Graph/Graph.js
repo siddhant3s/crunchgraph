@@ -57,6 +57,12 @@ class Graph extends React.Component {
     // const options = {};
     // eslint-disable-next-line no-unused-vars
     const network = new vis.Network(this.container, data, options);
+    network.on('doubleClick', ((NODES) => function (params) {
+      const nodeId = params.nodes[0];
+      const clickedNode = NODES.filter(n => n.id === nodeId)[0];
+      console.log('doubleClicked', clickedNode);
+    })(nods));
+
     network.on('click', ((NODES) => function (params) {
       params.event = '[original event]';
       const nodeId = params.nodes[0];

@@ -19,6 +19,31 @@ const pairwise = (list) => {
   return pairs.concat(pairwise(rest));
 };
 
+const doQuery = (query: string, cb): void => {
+  db.http({
+    method: 'POST',
+    path: '/db/data/transaction/commit',
+    raw: true,
+    body: {
+      statements: [
+        { statement: query, parameters: {}, resultDataContents: ['row', 'graph'] },
+      ],
+    },
+  }, (err, resp) => {
+    if (err) throw err;
+    console.log(resp.statusCode, 200);
+    const graphs = resp.body.results[0].data.map(d => d.graph);
+    const nodes = {};
+    const rels = {};
+    graphs.forEach(g => {
+      g.nodes.forEach(n => { nodes[n.id] = n; });
+      g.relationships.forEach(r => { rels[r.id] = r; });
+    });
+    const graph = { nodes: Object.values(nodes), relationships: Object.values(rels) };
+    cb(graph, graph);
+  });
+};
+
 router.get('/nodes', (req, res): void => {
   const { ids = [] } = req.query;
   if (!ids.length || !ids.map) {
@@ -34,6 +59,18 @@ router.get('/nodes', (req, res): void => {
   });
 });
 
+router.get('/expandNode', (req, res): void => {
+  const { id } = req.query;
+  if (!id) {
+    res.json({});
+    return;
+  }
+  const query = `match (o:Organization) where ID(o) = ${id}
+match (o)-[r]->(o2)
+return *`;
+  doQuery(query, (data, data2) => res.json(data2));
+});
+
 router.get('/shortestPaths', (req, res): void => {
   const { ids = [] } = req.query;
   const fPart = `match ${ids.map(id => `(e${id})`).join(',')}
@@ -47,35 +84,7 @@ router.get('/shortestPaths', (req, res): void => {
   ).join(',');
 
   const query = `${fPart}\n${sPart}\nreturn ${lPart} limit 50`;
-  console.log(query);
-  const relationships = [];
-  const nodes = [];
-  db.http({
-    method: 'POST',
-    path: '/db/data/transaction/commit',
-    raw: true,
-    body: {
-      statements: [
-        { statement: query, parameters: {}, resultDataContents: ['row', 'graph'] },
-      ],
-    },
-  }, (err, resp) => {
-    if (err) throw err;
-    console.log(resp.statusCode, 200);
-    const data = resp.body.results[0].data.map(d => d.graph)[0];
-    res.json(data);
-  });
-  // db.cypher({ query, lean: true }, (err, results) => {
-  //   results.forEach(result => {
-  //     Object.values(result).forEach(p => {
-  //       relationships.push(...p.relationships);
-  //       nodes.push(...p.nodes);
-  //     });
-  //   });
-  //   console.log(relationships[0], nodes[0]);
-  //   res.json(results);
-  // });
-//  res.send('Okay');
+  doQuery(query, data => res.json(data));
 });
 
 router.get('/', (req, res) => {
